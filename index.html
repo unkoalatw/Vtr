@@ -13,6 +13,15 @@
             font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: #FFFFFF; touch-action: none;
         }
+        html.transparent, html.transparent body { background: transparent !important; }
+        body.ui-hidden header, body.ui-hidden footer, body.ui-hidden #touchHint,
+        body.ui-hidden #toastMsg, body.ui-hidden #camPreviewContainer, body.ui-hidden #settingsPanel { display: none !important; }
+        .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .set-row label { color: #e7e5e4; font-size: 13px; }
+        .set-row small { display: block; color: #a8a29e; font-size: 11px; }
+        .set-row select { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 6px 8px; font-size: 13px; max-width: 52%; }
+        .set-row select option { color: #111; }
+        .set-group { font-size: 11px; font-weight: 700; color: #d6d3d1; letter-spacing: .08em; margin-top: 6px; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 4px; }
         .layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
         .glass-panel {
             background: rgba(28, 25, 24, 0.8);
@@ -51,13 +60,16 @@
             </div>
         </div>
         <div class="flex items-center gap-2 pointer-events-auto">
+            <button onclick="openSettings()" class="glass-panel hover:bg-white/15 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1 shadow-lg" title="設定">
+                <span>⚙️</span> <span class="hidden sm:inline">設定</span>
+            </button>
             <button onclick="calibratePose()" class="glass-panel hover:bg-white/15 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1 shadow-lg" title="校正正中間角度">
                 <span>🎯</span> <span class="hidden sm:inline">回正校正</span>
             </button>
             <button id="btnGreenScreen" onclick="toggleGreenScreen()" class="glass-panel hover:bg-white/15 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1 shadow-lg" title="切換綠幕去背">
                 <span>🟩</span> <span class="hidden sm:inline">綠幕</span>
             </button>
-            <button onclick="toggleCleanUI()" class="glass-panel hover:bg-white/15 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-medium shadow-lg" title="隱藏介面">👁️</button>
+            <button onclick="toggleCleanUI()" class="glass-panel hover:bg-white/15 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-medium shadow-lg" title="隱藏全部介面（鍵盤 H；手機上連點兩下畫面可叫回）">👁️</button>
         </div>
     </header>
 
@@ -75,6 +87,17 @@
         </div>
     </div>
 
+    <div id="settingsPanel" class="hidden fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40" onclick="if (event.target === this) closeSettings()">
+        <div class="glass-panel w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-4 text-sm">
+            <div class="flex items-center justify-between mb-3">
+                <span class="font-bold text-base">⚙️ 設定</span>
+                <button onclick="closeSettings()" class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20">完成</button>
+            </div>
+            <div id="settingsBody" class="flex flex-col gap-3"></div>
+            <p class="mt-4 text-[11px] text-stone-400 leading-relaxed">設定會自動記住。鍵盤 H：隱藏 / 顯示全部介面；手機上介面隱藏時，連點兩下畫面可叫回。</p>
+        </div>
+    </div>
+
     <div id="toastMsg" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 glass-panel px-4 py-2.5 rounded-2xl text-xs text-white shadow-2xl border border-stone-400/40 transition-all duration-300 opacity-0 pointer-events-none translate-y-[-10px]">訊息提示</div>
 
     <footer id="bottomUI" class="relative z-20 p-3 pb-4 flex flex-col gap-2.5 max-w-xl mx-auto w-full pointer-events-auto transition-transform duration-300">
@@ -83,7 +106,7 @@
                 <span>📷</span><span id="camBtnText">開啟手機前鏡頭同步</span>
             </button>
             <button onclick="cycleBgMode()" class="glass-panel py-2.5 px-3.5 rounded-2xl text-xs font-bold hover:bg-white/10 active:scale-95 transition flex items-center gap-1.5 shrink-0">
-                <span>❄️</span><span id="bgModeName">純白</span>
+                <span>❄️</span><span id="bgModeName">背景</span>
             </button>
         </div>
         <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
@@ -162,8 +185,11 @@
         let expressionMode = 0;
         let isGreenScreen = false;
         let isUIClean = false;
-        let currentBgIdx = 0;
-        const BG_MODES = ["純白", "冬日飄雪", "暖調咖啡廳"];
+        // 在 OBS 瀏覽器來源裡（或網址加 ?obs / ?transparent）自動使用透明背景
+        const URLQ = new URLSearchParams(location.search);
+        const IN_OBS = !!window.obsstudio || URLQ.has("obs") || URLQ.has("transparent");
+        const BG_MODES = ["透明", "純白", "冬日飄雪", "暖調咖啡廳"];
+        let currentBgIdx = IN_OBS ? 0 : 1;
         let headpatTimer = 0;
         const particles = [];
 
@@ -216,7 +242,8 @@
         const lerp = (a, b, t) => a + (b - a) * t;
         function updateSmooth(dt) {
             // 與幀率無關的指數平滑；鏡頭模式的雜訊已由 One Euro 濾波處理，這裡只做最後的柔化
-            const k1 = 1 - Math.exp(-dt * (isCameraActive ? 18 : 10));
+            const sk = SMOOTH_SCALE[settings.smoothing] || 1;
+            const k1 = 1 - Math.exp(-dt * (isCameraActive ? 18 * Math.sqrt(sk) : 10));
             const k2 = 1 - Math.exp(-dt * (isCameraActive ? 30 : 26));
             for (const k of ["yaw", "pitch", "roll", "hx", "hy", "gazeX", "gazeY", "mouthForm"]) P[k] = lerp(P[k], targetParams[k], k1);
             for (const k of ["eyeL", "eyeR", "mouthOpen"]) P[k] = lerp(P[k], targetParams[k], k2);
@@ -246,6 +273,91 @@
             gazeX: new OneEuro(0.6, 0.6), gazeY: new OneEuro(0.6, 0.6),
             mouthOpen: new OneEuro(1.5, 2.0), mouthForm: new OneEuro(0.8, 0.5)
         };
+
+        // =========================================================================
+        // 使用者設定（存在瀏覽器裡，下次打開沿用）
+        // =========================================================================
+        const SETTINGS_DEF = [
+            { group: "臉部偵測" },
+            { key: "detectRate", label: "偵測頻率", hint: "越高越即時，但越吃效能", def: "auto",
+              options: [["auto", "自動（依手機速度）"], ["10", "每秒 10 次"], ["15", "每秒 15 次"], ["20", "每秒 20 次"], ["30", "每秒 30 次"], ["60", "每秒 60 次"]] },
+            { key: "camRes", label: "鏡頭解析度", hint: "偵測用，越低越快", def: "240",
+              options: [["180", "320×180（最快）"], ["240", "320×240"], ["360", "640×360"], ["480", "640×480"], ["720", "1280×720（最準）"]] },
+            { key: "smoothing", label: "平滑度", hint: "高：穩定不抖；低：反應快", def: "mid",
+              options: [["low", "低（反應快）"], ["mid", "中"], ["high", "高（最穩）"], ["max", "超高"]] },
+            { key: "sensitivity", label: "動作幅度", hint: "角色跟著你動的程度", def: "1",
+              options: [["0.6", "小"], ["0.8", "偏小"], ["1", "標準"], ["1.25", "偏大"], ["1.5", "大"]] },
+            { key: "delegate", label: "運算方式", hint: "改了之後重新開鏡頭生效", def: "auto",
+              options: [["auto", "自動（GPU 優先）"], ["GPU", "GPU"], ["CPU", "CPU"]] },
+            { key: "detectThread", label: "偵測執行緒", hint: "背景＝不卡畫面；改了之後重新開鏡頭生效", def: "auto",
+              options: [["auto", "自動（背景優先）"], ["main", "一般（相容性最好）"]] },
+            { group: "眨眼" },
+            { key: "blinkMode", label: "眨眼偵測方式", hint: "觸發：偵測到眨眼就播完整眨眼，最乾脆；跟隨：照你眼睛的開合連續變化", def: "trigger",
+              options: [["trigger", "觸發（推薦）"], ["follow", "跟隨"]] },
+            { key: "blinkSens", label: "眨眼靈敏度", hint: "眨了沒反應 → 調高；沒眨卻閉眼 → 調低", def: "mid",
+              options: [["low", "低"], ["mid", "中"], ["high", "高"], ["max", "超高"]] },
+            { key: "eyeSync", label: "左右眼", hint: "同步：兩眼永遠一起動；單眼：可以 wink", def: "sync",
+              options: [["sync", "同步（推薦）"], ["wink", "允許單眼眨眼"]] },
+            { key: "autoBlink", label: "自動眨眼頻率", hint: "沒開鏡頭時角色自己眨眼的頻率", def: "low",
+              options: [["off", "不眨"], ["rare", "很少（10～16 秒）"], ["low", "少（6～11 秒）"], ["mid", "中（4～7 秒）"], ["high", "多（2～5 秒）"]] },
+            { group: "畫面" },
+            { key: "quality", label: "畫質", hint: "角色畫布的像素密度", def: "auto",
+              options: [["auto", "自動"], ["0.75", "低"], ["1", "中"], ["1.5", "高"], ["2", "超高"], ["3", "極高"]] },
+            { key: "resolution", label: "輸出解析度", hint: "設定後忽略「畫質」，依高度固定（適合 OBS）", def: "auto",
+              options: [["auto", "跟著視窗"], ["720", "720p"], ["1080", "1080p"], ["1440", "1440p"], ["2160", "4K"]] },
+            { key: "fps", label: "幀率上限", hint: "降低可省電、減少發熱", def: "60",
+              options: [["15", "15 FPS"], ["24", "24 FPS"], ["30", "30 FPS"], ["60", "60 FPS"], ["0", "不限"]] }
+        ];
+        const settings = {};
+        (() => {
+            let saved = {};
+            try { saved = JSON.parse(localStorage.getItem("vt_settings") || "{}"); } catch (e) {}
+            for (const d of SETTINGS_DEF) if (d.key) {
+                const ok = d.options.some(o => o[0] === saved[d.key]);
+                settings[d.key] = ok ? saved[d.key] : d.def;
+            }
+        })();
+        const SMOOTH_SCALE = { low: 2.0, mid: 1.0, high: 0.55, max: 0.3 };
+        function applySmoothing() {
+            const k = SMOOTH_SCALE[settings.smoothing] || 1;
+            for (const [name, f] of Object.entries(filters)) {
+                if (f.baseMin === undefined) { f.baseMin = f.minCutoff; f.baseBeta = f.beta; }
+                f.minCutoff = f.baseMin * k;
+                f.beta = f.baseBeta * Math.sqrt(k);
+            }
+        }
+
+        // ---- 眨眼觸發（遲滯判斷 + 最短閉眼時間，快速眨眼也抓得到）----
+        const BLINK_THR = { low: 0.72, mid: 0.56, high: 0.42, max: 0.3 };
+        const blinkState = {
+            L: { closed: false, since: 0, prev: 0 }, R: { closed: false, since: 0, prev: 0 },
+            tgtL: 1, tgtR: 1
+        };
+        function updateBlinkTrigger(cL, cR, wink) {
+            const now = performance.now();
+            const on = BLINK_THR[settings.blinkSens] || 0.56, off = on - 0.22;
+            const step = (s, c) => {
+                // 突然往下掉很多（眨眼很快、兩次偵測之間）也算眨眼
+                const jump = c - s.prev > 0.28 && c > on * 0.7;
+                s.prev = c;
+                if (!s.closed && (c > on || jump)) { s.closed = true; s.since = now; }
+                else if (s.closed && c < off && now - s.since > 90) s.closed = false;   // 至少閉 90ms，才看得到
+                return s.closed;
+            };
+            if (wink) {
+                blinkState.tgtL = step(blinkState.L, cL) ? 0 : 1;
+                blinkState.tgtR = step(blinkState.R, cR) ? 0 : 1;
+            } else {
+                const closed = step(blinkState.L, (cL + cR) / 2);
+                blinkState.tgtL = blinkState.tgtR = closed ? 0 : 1;
+            }
+        }
+        // 每一格把眼睛往目標推：閉眼 0.06 秒、睜眼 0.12 秒，兩眼速度相同所以一定同步
+        function animateTriggeredBlink(dt) {
+            const go = (v, tgt) => tgt < v ? Math.max(tgt, v - dt / 0.06) : Math.min(tgt, v + dt / 0.12);
+            P.eyeL = targetParams.eyeL = go(P.eyeL, blinkState.tgtL);
+            P.eyeR = targetParams.eyeR = go(P.eyeR, blinkState.tgtR);
+        }
 
         // 個人化校準：自動學習「你平常睜眼 / 閉嘴」的程度（小眼睛、大眼睛都能適配）
         const calib = { openL: null, openR: null, closeL: 0.72, closeR: 0.72, jaw0: null };
@@ -292,6 +404,7 @@
             'self.exports = {}; self.module = { exports: self.exports };',
             'let lm = null;',
             'self.onmessage = async (e) => {',
+            '  if (e.data && e.data.type === "init" && !e.data.delegates) e.data.delegates = ["GPU", "CPU"];',
             '  const d = e.data;',
             '  if (d.type === "init") {',
             '    let lastErr = null;',
@@ -301,7 +414,7 @@
             '        importScripts(base + "/vision_bundle.cjs");',
             '        const V = (self.module.exports && self.module.exports.FaceLandmarker) ? self.module.exports : self.exports;',
             '        const fs = await V.FilesetResolver.forVisionTasks(base + "/wasm");',
-            '        for (const delegate of ["GPU", "CPU"]) {',
+            '        for (const delegate of d.delegates) {',
             '          try {',
             '            lm = await V.FaceLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: new Uint8Array(d.model), delegate }, outputFaceBlendshapes: true, runningMode: "VIDEO", numFaces: 1 });',
             '            self.postMessage({ type: "ready", delegate }); return;',
@@ -332,6 +445,9 @@
         let faceWorker = null, workerReady = false, workerBusy = false, workerSentAt = 0, workerErrors = 0;
         let detectMode = "";   // 「背景」或「一般」
 
+        function delegateList() {
+            return settings.delegate === "auto" ? ["GPU", "CPU"] : [settings.delegate];
+        }
         function startWorker(model) {
             return new Promise((resolve) => {
                 let done = false;
@@ -359,7 +475,7 @@
                     }
                 };
                 const copy = model.buffer.slice(model.byteOffset, model.byteOffset + model.byteLength);
-                faceWorker.postMessage({ type: "init", libs: LIB_SOURCES, model: copy }, [copy]);
+                faceWorker.postMessage({ type: "init", libs: LIB_SOURCES, model: copy, delegates: delegateList() }, [copy]);
             });
         }
 
@@ -374,7 +490,7 @@
                 } catch (err) { lastErr = err; vision = null; console.warn("程式庫來源失敗", base, err); }
             }
             if (!vision) return "臉部捕捉程式庫下載失敗（" + (lastErr && lastErr.message) + "）";
-            for (const delegate of ["GPU", "CPU"]) {
+            for (const delegate of delegateList()) {
                 try {
                     setStatus("初始化臉部捕捉（" + delegate + "）…");
                     faceLandmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
@@ -431,7 +547,7 @@
 
             // 2) 優先用背景執行緒；不支援或失敗時改在主執行緒跑
             setStatus("背景載入臉部捕捉…");
-            if (typeof Worker !== "undefined" && typeof createImageBitmap === "function" && await startWorker(model)) {
+            if (settings.detectThread !== "main" && typeof Worker !== "undefined" && typeof createImageBitmap === "function" && await startWorker(model)) {
                 detectMode = "背景";
                 isModelLoading = false;
                 return true;
@@ -440,6 +556,24 @@
             if (err) return fail("⚠️ " + err);
             isModelLoading = false;
             return true;
+        }
+
+        function camConstraints() {
+            const h = parseInt(settings.camRes, 10);
+            const w = { 180: 320, 240: 320, 360: 640, 480: 640, 720: 1280 }[h] || 320;
+            return { facingMode: "user", width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30 } };
+        }
+        async function restartCameraStream() {
+            if (!isCameraActive || !videoEl.srcObject) return;
+            try {
+                videoEl.srcObject.getTracks().forEach(t => t.stop());
+                videoEl.srcObject = await navigator.mediaDevices.getUserMedia({ video: camConstraints(), audio: false });
+                await videoEl.play();
+            } catch (err) { console.error(err); showToast("⚠️ 無法切換鏡頭解析度"); }
+        }
+        function resetDetector() {
+            if (faceWorker) { faceWorker.terminate(); faceWorker = null; }
+            workerReady = false; workerBusy = false; faceLandmarker = null;
         }
 
         async function toggleCameraTracking() {
@@ -466,10 +600,11 @@
             }
             if (!(await initFaceLandmarker())) return;
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 30 } }, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: camConstraints(), audio: false });
                 Object.values(filters).forEach(f => f.reset());
                 calib.openL = calib.openR = calib.jaw0 = null;
                 calib.closeL = calib.closeR = 0.72;
+                Object.assign(blinkState, { tgtL: 1, tgtR: 1 }); blinkState.L.closed = blinkState.R.closed = false;
                 previewCanvas.width = 140; previewCanvas.height = 180;
                 videoEl.srcObject = stream;
                 await videoEl.play();
@@ -489,7 +624,10 @@
         function togglePreviewWindow() { document.getElementById("camPreviewContainer").classList.toggle("hidden"); }
 
         // 偵測限頻：預設約 30 次/秒，手機較慢時自動放寬，避免拖慢畫面
-        let lastDetectAt = 0, detectInterval = 33, lastDetectDt = 0.033, detectCount = 0, detectRateTimer = 0;
+        function detectMinInterval() {
+            return settings.detectRate === "auto" ? 33 : 1000 / parseInt(settings.detectRate, 10) - 2;
+        }
+        let lastDetectAt = 0, detectInterval = 50, lastDetectDt = 0.033, detectCount = 0, detectRateTimer = 0;
         let statusCache = "";
         function setStatus(text) {
             if (text === statusCache) return;   // 只在文字改變時才動 DOM
@@ -528,7 +666,7 @@
                     if (now - workerSentAt > 2500) fallbackToMainThread("背景偵測沒有回應");
                     return;
                 }
-                if (now - lastDetectAt < 33) return;
+                if (now - lastDetectAt < detectMinInterval()) return;
                 lastDetectAt = now;
                 workerBusy = true;
                 workerSentAt = now;
@@ -542,13 +680,13 @@
             // 主執行緒模式（限頻）
             if (!faceLandmarker) return;
             if (videoEl.currentTime === lastVideoTime) return;
-            if (now - lastDetectAt < detectInterval) return;
+            if (now - lastDetectAt < (settings.detectRate === "auto" ? detectInterval : detectMinInterval())) return;
             lastDetectAt = now;
             lastVideoTime = videoEl.currentTime;
             const t0 = performance.now();
             const result = faceLandmarker.detectForVideo(videoEl, now);
             const cost = performance.now() - t0;
-            detectInterval = Math.max(33, Math.min(80, detectInterval * 0.9 + cost * 1.6 * 0.1));
+            detectInterval = Math.max(50, Math.min(100, detectInterval * 0.85 + cost * 2.5 * 0.15));   // 一般模式：偵測太花時間就降頻，畫面優先
             const dt = resultDt();
             if (!result.faceLandmarks || !result.faceLandmarks.length) {
                 drawPreview(null);
@@ -597,11 +735,12 @@
             rawPose.hy = (cy - 0.5) * 2;
             const clamp = (v, m) => Math.max(-m, Math.min(m, v));
             const clamp01 = v => Math.max(0, Math.min(1, v));
-            targetParams.yaw = filters.yaw.filter(clamp(rawPose.yaw - calibOffset.yaw, 30), dt);
-            targetParams.pitch = filters.pitch.filter(clamp(rawPose.pitch - calibOffset.pitch, 24), dt);
-            targetParams.roll = filters.roll.filter(clamp(rawPose.roll - calibOffset.roll, 20), dt);
-            targetParams.hx = filters.hx.filter(clamp(rawPose.hx - calibOffset.hx, 0.85), dt);
-            targetParams.hy = filters.hy.filter(clamp(rawPose.hy - calibOffset.hy, 0.75), dt);
+            const sens = parseFloat(settings.sensitivity) || 1;
+            targetParams.yaw = filters.yaw.filter(clamp((rawPose.yaw - calibOffset.yaw) * sens, 30), dt);
+            targetParams.pitch = filters.pitch.filter(clamp((rawPose.pitch - calibOffset.pitch) * sens, 24), dt);
+            targetParams.roll = filters.roll.filter(clamp((rawPose.roll - calibOffset.roll) * sens, 20), dt);
+            targetParams.hx = filters.hx.filter(clamp((rawPose.hx - calibOffset.hx) * sens, 0.85), dt);
+            targetParams.hy = filters.hy.filter(clamp((rawPose.hy - calibOffset.hy) * sens, 0.75), dt);
 
             if (!bs || !Object.keys(bs).length) return;
             const g = n => bs[n] || 0;
@@ -622,13 +761,19 @@
             const eyeOpen = (b, o, c) => 1 - clamp01((b - o - 0.07) / Math.max(0.12, c - o - 0.12));
             let oL = eyeOpen(bL, calib.openL, calib.closeL);
             let oR = eyeOpen(bR, calib.openR, calib.closeR);
-            // 死區：接近全開 / 全閉時直接吸附，避免眼皮線在邊界閃爍
-            const dead = v => clamp01((v - 0.1) / 0.78);
-            oL = dead(oL); oR = dead(oR);
-            // 兩眼差不多時取平均，避免單眼雜訊造成大小眼；差很多（眨單眼）才分開
-            if (Math.abs(oL - oR) < 0.35) oL = oR = (oL + oR) / 2;
-            targetParams.eyeL = clamp01(filters.eyeL.filter(oL, dt));
-            targetParams.eyeR = clamp01(filters.eyeR.filter(oR, dt));
+            const wink = settings.eyeSync === "wink";
+            if (settings.blinkMode === "trigger") {
+                // 觸發模式：用原始數值（不經平滑，反應最快）判斷「有沒有眨眼」，有就播放完整的眨眼動畫
+                updateBlinkTrigger(1 - oL, 1 - oR, wink);
+            } else {
+                // 跟隨模式：死區 + 平滑，連續開合
+                const dead = v => clamp01((v - 0.1) / 0.78);
+                oL = dead(oL); oR = dead(oR);
+                if (!wink || Math.abs(oL - oR) < 0.45) oL = oR = (oL + oR) / 2;   // 同步：兩眼一定一樣
+                targetParams.eyeL = clamp01(filters.eyeL.filter(oL, dt));
+                targetParams.eyeR = clamp01(filters.eyeR.filter(oR, dt));
+                if (!wink) targetParams.eyeR = targetParams.eyeL = (targetParams.eyeL + targetParams.eyeR) / 2;
+            }
 
             // --- 視線 ---
             const lookR = g("eyeLookInRight") + g("eyeLookOutLeft");
@@ -823,10 +968,7 @@
                     posArr[k++] = view.ay + (p.y - FACE.y) * view.s;
                 }
                 gl.bindTexture(gl.TEXTURE_2D, G.tex);
-                if (G.L.name === "face" && faceDirty) {
-                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, faceCanvas);
-                    faceDirty = false;
-                }
+                if (G.L.name === "face") uploadFace();
                 gl.bindBuffer(gl.ARRAY_BUFFER, G.uvBuf);
                 gl.vertexAttribPointer(aUVLoc, 2, gl.FLOAT, false, 0, 0);
                 gl.bindBuffer(gl.ARRAY_BUFFER, G.posBuf);
@@ -846,26 +988,77 @@
         let dprNow = 1;
 
         // 重畫臉層：原圖臉 + 眨眼 / 視線 / 嘴巴 / 臉紅，只在數值有變時才重畫並上傳
+        // 只重畫有變化的小區塊（左眼 / 右眼 / 嘴巴），並用 texSubImage2D 只上傳那一小塊
+        //   以前每一格都重畫並上傳整張 727×557 的臉，手機上非常慢
+        const FACE_REGIONS = [
+            { name: "eyeL", x: 335, y: 395, w: 230, h: 170 },
+            { name: "eyeR", x: 625, y: 390, w: 230, h: 170 },
+            { name: "mouth", x: 505, y: 630, w: 170, h: 115 }
+        ].map(r => { const c = document.createElement("canvas"); c.width = r.w; c.height = r.h; return { ...r, c, ctx: c.getContext("2d"), key: "" }; });
+        const pendingUploads = [];
+        let lastGlobalKey = "", faceFullDirty = true;
+
+        function blushAmount() {
+            return expressionMode === 1 || headpatTimer > 0 ? 0.42 : (expressionMode === 3 ? 0.22 : 0);
+        }
+
         function updateFaceTexture(time) {
             if (!faceImg) return;
-            const q = v => Math.round(v * 50);
-            const key = [q(P.eyeL), q(P.eyeR), Math.round(P.gazeX * 14), Math.round(P.gazeY * 8), q(P.mouthOpen), q(P.mouthForm),
-                expressionMode, headpatTimer > 0 ? 1 : 0, expressionMode === 2 ? Math.round(time * 20) : 0].join(",");
-            if (key === lastFaceKey) return;
-            lastFaceKey = key;
-            const c = faceCtx;
-            c.setTransform(1, 0, 0, 1, 0, 0);
-            c.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
-            c.drawImage(faceImg, 0, 0);
-            c.save();
-            c.translate(-faceLayer.x, -faceLayer.y);
-            const blushAmt = expressionMode === 1 || headpatTimer > 0 ? 0.42 : (expressionMode === 3 ? 0.22 : 0);
-            if (blushAmt > 0) drawBlush(blushAmt);
-            drawEyeOverlay(EYES[0], P.eyeL, time);
-            drawEyeOverlay(EYES[1], P.eyeR, time);
-            drawMouthOverlay(P.mouthOpen, P.mouthForm);
-            c.restore();
-            faceDirty = true;
+            const q = v => Math.round(v * 40);
+            const blush = blushAmount();
+            const star = expressionMode === 2 ? Math.round(time * 15) : 0;
+            const globalKey = expressionMode + "," + (headpatTimer > 0 ? 1 : 0) + "," + blush;
+            if (globalKey !== lastGlobalKey) {
+                // 表情切換（臉紅等）會影響整張臉：重畫整張（很少發生）
+                lastGlobalKey = globalKey;
+                const c = faceCtx;
+                fx = c;
+                c.setTransform(1, 0, 0, 1, 0, 0);
+                c.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+                c.drawImage(faceImg, 0, 0);
+                c.save();
+                c.translate(-faceLayer.x, -faceLayer.y);
+                if (blush > 0) drawBlush(blush);
+                c.restore();
+                faceFullDirty = true;
+                FACE_REGIONS.forEach(r => r.key = "");
+            }
+            const gaze = Math.round(P.gazeX * 10) + "," + Math.round(P.gazeY * 6);
+            const keys = {
+                eyeL: q(P.eyeL) + "," + gaze + "," + star,
+                eyeR: q(P.eyeR) + "," + gaze + "," + star,
+                mouth: q(P.mouthOpen) + "," + Math.round(P.mouthForm * 10)
+            };
+            for (const r of FACE_REGIONS) {
+                const k = keys[r.name];
+                if (k === r.key) continue;
+                r.key = k;
+                const c = r.ctx;
+                fx = c;
+                c.setTransform(1, 0, 0, 1, 0, 0);
+                c.clearRect(0, 0, r.w, r.h);
+                // 底圖：臉層（含臉紅）的這一塊
+                c.drawImage(faceCanvas, r.x - faceLayer.x, r.y - faceLayer.y, r.w, r.h, 0, 0, r.w, r.h);
+                c.save();
+                c.translate(-r.x, -r.y);
+                if (r.name === "eyeL") drawEyeOverlay(EYES[0], P.eyeL, time);
+                else if (r.name === "eyeR") drawEyeOverlay(EYES[1], P.eyeR, time);
+                else drawMouthOverlay(P.mouthOpen, P.mouthForm);
+                c.restore();
+                pendingUploads.push(r);
+            }
+            fx = faceCtx;
+        }
+
+        function uploadFace() {
+            if (faceFullDirty) {
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, faceCanvas);
+                faceFullDirty = false;
+            }
+            while (pendingUploads.length) {
+                const r = pendingUploads.shift();
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, r.x - faceLayer.x, r.y - faceLayer.y, gl.RGBA, gl.UNSIGNED_BYTE, r.c);
+            }
         }
 
         function skinCover(e, clipFn, closed = false, alpha = 1) {
@@ -1156,11 +1349,64 @@
             document.getElementById("btnGreenScreen").classList.toggle("btn-active", isGreenScreen);
             showToast(isGreenScreen ? "🟩 已開啟綠幕去背模式" : "🎨 已恢復背景模式");
         }
-        function toggleCleanUI() {
-            isUIClean = !isUIClean;
-            document.getElementById("bottomUI").style.transform = isUIClean ? "translateY(120%)" : "translateY(0)";
-            if (isUIClean) showToast("已隱藏底部控制列（再點一次右上角 👁️ 恢復）");
+        function renderSettings() {
+            const body = document.getElementById("settingsBody");
+            body.innerHTML = "";
+            for (const d of SETTINGS_DEF) {
+                if (d.group) {
+                    const g = document.createElement("div"); g.className = "set-group"; g.textContent = d.group; body.appendChild(g);
+                    continue;
+                }
+                const row = document.createElement("div"); row.className = "set-row";
+                const lab = document.createElement("label");
+                lab.textContent = d.label;
+                const sm = document.createElement("small"); sm.textContent = d.hint; lab.appendChild(sm);
+                const sel = document.createElement("select");
+                for (const [v, txt] of d.options) {
+                    const o = document.createElement("option"); o.value = v; o.textContent = txt; sel.appendChild(o);
+                }
+                sel.value = settings[d.key];
+                sel.onchange = () => changeSetting(d.key, sel.value);
+                row.appendChild(lab); row.appendChild(sel); body.appendChild(row);
+            }
         }
+        function changeSetting(key, value) {
+            settings[key] = value;
+            try { localStorage.setItem("vt_settings", JSON.stringify(settings)); } catch (e) {}
+            if (key === "smoothing") applySmoothing();
+            if (key === "camRes") restartCameraStream();
+            if (key === "detectRate") detectInterval = 50;
+            if (key === "delegate" || key === "detectThread") {
+                resetDetector();
+                if (isCameraActive) { toggleCameraTracking(); showToast("已套用，請重新開啟鏡頭"); }
+            }
+        }
+        function openSettings() { renderSettings(); document.getElementById("settingsPanel").classList.remove("hidden"); }
+        function closeSettings() { document.getElementById("settingsPanel").classList.add("hidden"); }
+
+        // 一鍵隱藏所有介面（按 H 或右上角 👁️）；直播時畫面上只剩角色
+        function toggleCleanUI(force) {
+            isUIClean = typeof force === "boolean" ? force : !isUIClean;
+            document.body.classList.toggle("ui-hidden", isUIClean);
+            try { localStorage.setItem("vt_ui_hidden", isUIClean ? "1" : "0"); } catch (e) {}
+        }
+        // 手機沒有鍵盤：介面隱藏時，連點兩下畫面就把介面叫回來
+        let lastTapAt = 0;
+        window.addEventListener("pointerup", () => {
+            const now = performance.now();
+            if (isUIClean && now - lastTapAt < 320) toggleCleanUI(false);
+            lastTapAt = now;
+        });
+        window.addEventListener("keydown", (e) => {
+            if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+            const tag = (e.target && e.target.tagName) || "";
+            if (tag === "INPUT" || tag === "TEXTAREA") return;
+            if (e.key === "Escape") closeSettings();
+            if (e.key === "h" || e.key === "H") {
+                toggleCleanUI();
+                if (!isUIClean) showToast("介面已顯示（按 H 隱藏）");
+            }
+        });
         function cycleBgMode() {
             currentBgIdx = (currentBgIdx + 1) % BG_MODES.length;
             document.getElementById("bgModeName").textContent = BG_MODES[currentBgIdx];
@@ -1188,14 +1434,18 @@
         const flakes = Array.from({ length: 40 }, () => ({ x: Math.random(), y: Math.random(), r: 1.5 + Math.random() * 3, sp: 0.03 + Math.random() * 0.05, d: Math.random() * 6.28 }));
 
         function drawBackground(cw, ch, time) {
+            const transparent = !isGreenScreen && currentBgIdx === 0;
+            document.documentElement.classList.toggle("transparent", transparent);
+            bg.clearRect(0, 0, cw, ch);
+            if (transparent) return;
             if (isGreenScreen) { bg.fillStyle = "#00FF00"; bg.fillRect(0, 0, cw, ch); return; }
-            if (currentBgIdx === 0) { bg.fillStyle = "#FFFFFF"; bg.fillRect(0, 0, cw, ch); return; }
+            if (currentBgIdx === 1) { bg.fillStyle = "#FFFFFF"; bg.fillRect(0, 0, cw, ch); return; }
             const g = bg.createLinearGradient(0, 0, 0, ch);
-            if (currentBgIdx === 1) { g.addColorStop(0, "#3F3F46"); g.addColorStop(1, "#18181B"); }
+            if (currentBgIdx === 2) { g.addColorStop(0, "#3F3F46"); g.addColorStop(1, "#18181B"); }
             else { g.addColorStop(0, "#5A4436"); g.addColorStop(1, "#2A1E17"); }
             bg.fillStyle = g;
             bg.fillRect(0, 0, cw, ch);
-            if (currentBgIdx === 1) {
+            if (currentBgIdx === 2) {
                 bg.fillStyle = "rgba(255,255,255,0.7)";
                 for (const f of flakes) {
                     bg.beginPath();
@@ -1215,7 +1465,7 @@
         }
 
         // 自然眨眼：快速闔上、稍慢張開，間隔隨機，偶爾連眨兩下
-        let nextBlinkAt = 2, blinkStart = -10, blinkCount = 1;
+        let nextBlinkAt = 4, blinkStart = -10, blinkCount = 1;
         const BLINK_CLOSE = 0.07, BLINK_HOLD = 0.04, BLINK_OPEN = 0.16;
         function blinkValue(time) {
             const total = BLINK_CLOSE + BLINK_HOLD + BLINK_OPEN;
@@ -1223,8 +1473,9 @@
                 blinkStart = time;
                 if (blinkCount > 1) { blinkCount--; nextBlinkAt = time + total + 0.08; }
                 else {
-                    blinkCount = Math.random() < 0.18 ? 2 : 1;
-                    nextBlinkAt = blinkCount > 1 ? time + total + 0.08 : time + 2.2 + Math.random() * 3.8;
+                    const [lo, hi] = { rare: [10, 16], low: [6, 11], mid: [4, 7], high: [2, 5] }[settings.autoBlink] || [6, 11];
+                    blinkCount = Math.random() < 0.08 ? 2 : 1;
+                    nextBlinkAt = blinkCount > 1 ? time + total + 0.08 : time + lo + Math.random() * (hi - lo);
                 }
             }
             const t = time - blinkStart;
@@ -1235,7 +1486,7 @@
             return 1 - Math.pow(1 - u, 2.2);
         }
 
-        let lastBgKey = "";
+        let lastBgKey = "", hadParticles = false;
         function resize(c, cw, ch, dpr) {
             const w = Math.round(cw * dpr), h = Math.round(ch * dpr);
             if (c.width !== w || c.height !== h) { c.width = w; c.height = h; return 1; }
@@ -1246,6 +1497,8 @@
 
         function renderLoop(now) {
             requestAnimationFrame(renderLoop);
+            const cap = parseInt(settings.fps, 10);
+            if (cap > 0 && now - lastFrame < 1000 / cap - 2) return;   // 幀率上限
             const dt = Math.min(0.05, (now - lastFrame) / 1000);
             lastFrame = now;
             const time = now / 1000;
@@ -1267,22 +1520,28 @@
                     targetParams.gazeX = Math.sin(time * 0.65) * 0.35;
                     targetParams.gazeY = expressionMode === 1 ? 0.7 : Math.cos(time * 0.85) * 0.15;
                 }
-                const b = blinkValue(time);
+                const b = settings.autoBlink === "off" ? 1 : blinkValue(time);
                 targetParams.eyeL = targetParams.eyeR = b;
                 P.eyeL = P.eyeR = b;
                 if (expressionMode === 5 && !isPointerDown) targetParams.mouthOpen = 0.5;
                 else if (expressionMode !== 5 && !isPointerDown && targetParams.mouthOpen === 0.5) targetParams.mouthOpen = 0;
             }
             updateSmooth(dt);
+            if (isCameraActive && settings.blinkMode === "trigger") animateTriggeredBlink(dt);
 
             const dpr = Math.min(window.devicePixelRatio || 1, 2);
             dprNow = dpr;
             const cw = window.innerWidth, ch = window.innerHeight;
-            const resized = resize(bgCanvas, cw, ch, dpr) | resize(glCanvas, cw, ch, dpr) | resize(fxCanvas, cw, ch, dpr);
+            // 角色畫布的像素密度：輸出解析度 > 畫質 > 自動（最多 1.5 倍）
+            let glDpr = Math.min(dpr, 1.5);
+            if (settings.resolution !== "auto") glDpr = parseInt(settings.resolution, 10) / ch;
+            else if (settings.quality !== "auto") glDpr = parseFloat(settings.quality);
+            glDpr = Math.max(0.5, Math.min(glDpr, 4096 / Math.max(cw, ch)));
+            const resized = resize(bgCanvas, cw, ch, 1) | resize(glCanvas, cw, ch, glDpr) | resize(fxCanvas, cw, ch, 1);
             // 靜態背景只在切換或尺寸改變時重畫；只有飄雪需要每格更新
             const bgKey = (isGreenScreen ? "g" : currentBgIdx) + "";
-            if (resized || bgKey !== lastBgKey || (!isGreenScreen && currentBgIdx === 1)) {
-                bg.setTransform(dpr, 0, 0, dpr, 0, 0);
+            if (resized || bgKey !== lastBgKey || (!isGreenScreen && currentBgIdx === 2)) {
+                bg.setTransform(1, 0, 0, 1, 0, 0);
                 drawBackground(cw, ch, time);
                 lastBgKey = bgKey;
             }
@@ -1314,9 +1573,12 @@
             drawCharacter(cw, ch);
 
             // 疊加層
-            pfx.setTransform(1, 0, 0, 1, 0, 0);
-            pfx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-            pfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            // 特效畫布只在有粒子（或剛結束）時才清除重畫
+            if (particles.length || hadParticles) {
+                pfx.setTransform(1, 0, 0, 1, 0, 0);
+                pfx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+            }
+            hadParticles = particles.length > 0;
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
                 p.x += p.vx * dt; p.y += p.vy * dt; p.alpha -= dt * 0.85;
@@ -1337,6 +1599,12 @@
             .catch((err) => { console.error(err); showToast("⚠️ 角色圖層載入失敗"); });
 
         window.onload = () => {
+            applySmoothing();
+            document.getElementById("bgModeName").textContent = BG_MODES[currentBgIdx];
+            let savedHidden = null;
+            try { savedHidden = localStorage.getItem("vt_ui_hidden"); } catch (e) {}
+            if (savedHidden === "1") toggleCleanUI(true);
+            if (IN_OBS) showToast("🎥 偵測到 OBS：背景已自動透明，按 H 可隱藏全部介面");
             const hint = document.getElementById("touchHint");
             setTimeout(() => { hint.style.opacity = "1"; }, 300);
             setTimeout(() => { hint.style.opacity = "0"; }, 4500);
